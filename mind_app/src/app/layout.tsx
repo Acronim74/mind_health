@@ -1,12 +1,10 @@
 // src/app/layout.tsx
+
 import "./globals.css";
 import Providers from "./Providers";
 
-/**
- * Корневой layout — Server Component.
- * Здесь подключаются общие стили и клиентский провайдер (через <Providers>).
- * Дополнительно можно указать метаданные страницы (title, description и т. п.).
- */
+// 1) Добавьте эту строку сразу после импорта Providers:
+import Navbar from "@/components/Navbar";
 
 export default function RootLayout({
   children,
@@ -16,7 +14,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        {/* Основные метатеги */}
+        {/* Метаданные */}
         <meta charSet="UTF-8" />
         <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
         <meta
@@ -28,12 +26,13 @@ export default function RootLayout({
           name="description"
           content="Приложение для психического здоровья с анкетами и AI-анализом."
         />
-        {/* Фавикон */}
         <link rel="icon" href="/favicon.ico" />
-        {/* Здесь можно добавить дополнительные шрифты или ссылки на внешние стили */}
       </head>
-      <body>
-        {/* Клиентский провайдер для сессии Supabase */}
+      <body className="bg-gray-50">
+        {/* 2) Вставляем Navbar прямо здесь, перед Providers */}
+        <Navbar />
+
+        {/* Клиентский провайдер для сессий Supabase */}
         <Providers>
           {children}
         </Providers>

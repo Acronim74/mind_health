@@ -3,24 +3,20 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabaseClient";
 
 export default function RegisterPage() {
   const router = useRouter();
 
-  // Состояния для полей формы и ошибок
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // Обработчик отправки формы
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
-    // Проверяем совпадение паролей
     if (password !== confirmPassword) {
       setError("Пароли не совпадают");
       return;
@@ -28,23 +24,37 @@ export default function RegisterPage() {
 
     setLoading(true);
 
-    // Вызываем Supabase для регистрации
-    const { error: signUpError } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { role: "user" },
-      },
-    });
+    try {
+      const res = await fetch("/api/signup", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
 
-    setLoading(false);
+      if (!res.ok) {
+        const text = await res.text();
+        console.error("Ошибка при регистрации:", text);
+        setError(text || "Ошибка сервера при регистрации");
+        setLoading(false);
+        return;
+      }
 
-    if (signUpError) {
-      // Показываем ошибку от Supabase, если что-то пошло не так
-      setError(signUpError.message);
-    } else {
-      // После успешной регистрации Supabase автоматически логинит пользователя
+      let data;
+      try {
+        data = await res.json();
+      } catch (parseErr) {
+        console.error("Некорректный JSON от /api/signup:", await res.text());
+        setError("Неверный ответ от сервера");
+        setLoading(false);
+        return;
+      }
+
       router.push("/dashboard");
+    } catch (networkError) {
+      console.error("Сетевая ошибка при регистрации:", networkError);
+      setError("Не удалось связаться с сервером");
+      setLoading(false);
     }
   };
 
@@ -56,7 +66,6 @@ export default function RegisterPage() {
         onSubmit={handleSubmit}
         className="w-full max-w-md bg-white p-8 rounded shadow"
       >
-        {/* Показываем ошибку, если она есть */}
         {error && <p className="text-red-500 mb-4">{error}</p>}
 
         <div className="mb-4">

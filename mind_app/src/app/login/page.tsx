@@ -3,37 +3,64 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabaseClient";
 
 export default function LoginPage() {
   const router = useRouter();
 
-  // Состояния для полей и ошибок
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // Обработчик отправки формы
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setLoading(true);
 
-    // Запрос на вход
-    const { data, error: signInError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    console.log("handleSubmit: старт");
 
-    setLoading(false);
+    try {
+      const res = await fetch("/api/login", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
 
-    if (signInError) {
-      // Если ошибка (неверный логин/пароль)
-      setError(signInError.message);
-    } else {
-      // При успешном входе перенаправляем в /dashboard
-      router.push("/dashboard");
+      console.log("handleSubmit: получен ответ, status =", res.status);
+
+      if (!res.ok) {
+        const text = await res.text();
+        console.log("handleSubmit: ошибка сервера:", text);
+        setError(text || "Ошибка при входе");
+        setLoading(false);
+        return;
+      }
+
+      let data: { success: boolean; role: string };
+      try {
+        data = await res.json();
+        console.log("handleSubmit: распарсен JSON:", data);
+      } catch (parseErr) {
+        const txt = await res.text();
+        console.log("handleSubmit: невалидный JSON от /api/login:", txt);
+        setError("Неверный ответ от сервера");
+        setLoading(false);
+        return;
+      }
+
+      // Перенаправляем в зависимости от роли:
+      if (data.role === "admin") {
+        console.log("handleSubmit: роль admin, redirect to /admin");
+        router.push("/admin");
+      } else {
+        console.log("handleSubmit: роль user, redirect to /dashboard");
+        router.push("/dashboard");
+      }
+    } catch (networkError) {
+      console.error("handleSubmit: сетевая ошибка при логине:", networkError);
+      setError("Не удалось связаться с сервером");
+      setLoading(false);
     }
   };
 
@@ -45,7 +72,6 @@ export default function LoginPage() {
         onSubmit={handleSubmit}
         className="w-full max-w-md bg-white p-8 rounded shadow"
       >
-        {/* Показываем ошибку, если есть */}
         {error && <p className="text-red-500 mb-4">{error}</p>}
 
         <div className="mb-4">

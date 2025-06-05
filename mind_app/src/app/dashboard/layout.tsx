@@ -1,31 +1,27 @@
 // src/app/dashboard/layout.tsx
-"use client";
-
-import { ReactNode, useEffect } from "react";
-import { useSession } from "@supabase/auth-helpers-react";
-import { useRouter } from "next/navigation";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+import * as jose from "jose";
+import { ReactNode } from "react";
 
 interface DashboardLayoutProps {
   children: ReactNode;
 }
 
-export default function DashboardLayout({ children }: DashboardLayoutProps) {
-  const session = useSession();
-  const router = useRouter();
+export default async function DashboardLayout({ children }: DashboardLayoutProps) {
+  const cookieStore = cookies();
+  const token = cookieStore.get("token")?.value;
 
-  // Если сессии нет — перекидываем на страницу входа
-  useEffect(() => {
-    if (session === null) {
-      // session === null означает, что мы уже проверили, но пользователя нет
-      router.replace("/login");
-    }
-  }, [session, router]);
-
-  // Пока ждём, когда useSession разрешит либо установит session, можно рендерить ничего 
-  if (session === undefined || session === null) {
-    return null; // не показываем контент, пока не убедились, что есть сессия
+  if (!token) {
+    redirect("/login");
   }
 
-  // Пользователь авторизован — показываем children
+  try {
+    // Важно: SECRET должен быть доступен на сервере (в .env.local)
+    await jose.jwtVerify(token, new TextEncoder().encode(process.env.JWT_SECRET!));
+  } catch (err) {
+    redirect("/login");
+  }
+
   return <>{children}</>;
 }

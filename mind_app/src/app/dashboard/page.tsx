@@ -2,7 +2,7 @@
 
 import { createClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
-import { notFound, redirect } from "next/navigation";
+import { redirect } from "next/navigation";
 import Link from "next/link";
 import * as jose from "jose";
 
@@ -28,7 +28,6 @@ interface UserAnswerInfo {
 
 interface PageProps {}
 
-// Функция для верификации JWT и извлечения payload
 async function verifyJwt(token: string): Promise<JwtPayload> {
   const { payload } = await jose.jwtVerify(
     token,
@@ -38,39 +37,35 @@ async function verifyJwt(token: string): Promise<JwtPayload> {
 }
 
 export default async function DashboardPage(props: PageProps) {
-  // 1) Получаем токен из cookie
-  const cookieStore = cookies();
-  const tokenCookie = cookieStore.get("token");
+  // 1) асинхронно получаем куки
+  const cookieStore = await cookies();
+  const tokenCookie = cookieStore.get("token")?.value;
   if (!tokenCookie) {
-    // Если токена нет, перенаправляем на страницу логина
-    redirect("/login");
+    return redirect("/login");
   }
 
+  // 2) верификация токена
   let payload: JwtPayload;
   try {
-    payload = await verifyJwt(tokenCookie.value);
+    payload = await verifyJwt(tokenCookie);
   } catch {
-    // Если токен невалидный, редирект на логин
-    redirect("/login");
+    return redirect("/login");
   }
-
   const userId = payload.sub;
 
-  // 2) Инициализируем Supabase на сервере (Service Role Key)
+  // 3) инициализация Supabase
   const supabase = createClient(
     process.env.SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 
-  // 3) Загружаем все группы
+  // 4) загрузка групп
   const { data: groupsData, error: groupsErr } = await supabase
     .from<GroupInfo>("groups")
     .select("id, title, description")
     .order("title", { ascending: true });
-
   if (groupsErr) {
     console.error("Ошибка при загрузке групп:", groupsErr);
-    // Можно либо показать ошибку, либо вернуть notFound()
     return (
       <div className="p-8">
         <h2 className="text-2xl font-semibold mb-4">Ваш кабинет</h2>
@@ -78,66 +73,38 @@ export default async function DashboardPage(props: PageProps) {
       </div>
     );
   }
+  const groups = groupsData || [];
 
-  const groups: GroupInfo[] = groupsData || [];
-
-  // 4) Загружаем все анкеты (id + group_id)
-  const { data: questionnairesData, error: quesErr } = await supabase
+  // 5) загрузка анкет и ответов
+  const { data: questionnairesData } = await supabase
     .from<QuestionnaireInfo>("questionnaires")
     .select("id, group_id");
+  const questionnaires = questionnairesData || [];
 
-  if (quesErr) {
-    console.error("Ошибка при загрузке анкет:", quesErr);
-    return (
-      <div className="p-8">
-        <h2 className="text-2xl font-semibold mb-4">Ваш кабинет</h2>
-        <p className="text-red-500">Не удалось загрузить анкеты.</p>
-      </div>
-    );
-  }
-
-  const questionnaires: QuestionnaireInfo[] = questionnairesData || [];
-
-  // 5) Загружаем все отправленные (is_submitted = true) ответы текущего пользователя
-  const { data: userAnswersData, error: uaErr } = await supabase
+  const { data: userAnswersData } = await supabase
     .from<UserAnswerInfo>("user_answers")
     .select("questionnaire_id")
     .eq("user_id", userId)
     .eq("is_submitted", true);
+  const userAnswers = userAnswersData || [];
 
-  if (uaErr) {
-    console.error("Ошибка при загрузке ответов пользователя:", uaErr);
-    return (
-      <div className="p-8">
-        <h2 className="text-2xl font-semibold mb-4">Ваш кабинет</h2>
-        <p className="text-red-500">Не удалось загрузить ваши ответы.</p>
-      </div>
-    );
-  }
-
-  const userAnswers: UserAnswerInfo[] = userAnswersData || [];
-
-  // 6) Строим карты: для каждой группы — сколько всего анкет и сколько уже пройдено
+  // 6) подсчёт прогресса
   const totalPerGroup = new Map<number, number>();
-  for (const q of questionnaires) {
+  questionnaires.forEach((q) => {
     totalPerGroup.set(q.group_id, (totalPerGroup.get(q.group_id) || 0) + 1);
-  }
-
-  // Считаем, какие questionnaire_id уже отправлены
-  const answeredSet = new Set<number>(
-    userAnswers.map((ua) => ua.questionnaire_id)
-  );
-  // Теперь считаем priled per group
+  });
+  const answeredSet = new Set(userAnswers.map((ua) => ua.questionnaire_id));
   const completedPerGroup = new Map<number, number>();
-  for (const q of questionnaires) {
+  questionnaires.forEach((q) => {
     if (answeredSet.has(q.id)) {
       completedPerGroup.set(
         q.group_id,
         (completedPerGroup.get(q.group_id) || 0) + 1
       );
     }
-  }
+  });
 
+  // 7) рендер
   return (
     <div className="p-8">
       <h2 className="text-2xl font-semibold mb-6">Ваш кабинет</h2>
